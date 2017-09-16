@@ -43,6 +43,8 @@ import org.apache.maven.plugin.descriptor.PluginDescriptor;
 import org.apache.maven.plugin.surefire.booterclient.ChecksumCalculator;
 import org.apache.maven.plugin.surefire.booterclient.ForkConfiguration;
 import org.apache.maven.plugin.surefire.booterclient.ForkStarter;
+import org.apache.maven.plugin.surefire.booterclient.JarClasspathForkConfiguration;
+import org.apache.maven.plugin.surefire.booterclient.JarManifestForkConfiguration;
 import org.apache.maven.plugin.surefire.booterclient.Platform;
 import org.apache.maven.plugin.surefire.booterclient.ProviderDetector;
 import org.apache.maven.plugin.surefire.log.PluginConsoleLogger;
@@ -132,12 +134,13 @@ public abstract class AbstractSurefireMojo
     extends AbstractMojo
     implements SurefireExecutionParameters
 {
+    private static final String FORK_ONCE = "once";
+    private static final String FORK_ALWAYS = "always";
+    private static final String FORK_NEVER = "never";
+    private static final String FORK_PERTHREAD = "perthread";
     private static final Map<String, String> JAVA_9_MATCHER_OLD_NOTATION = singletonMap( "version", "[1.9,)" );
-
     private static final Map<String, String> JAVA_9_MATCHER = singletonMap( "version", "[9,)" );
-
     private static final Platform PLATFORM = new Platform();
-
     private static final File SYSTEM_TMP_DIR = new File( System.getProperty( "java.io.tmpdir" ) );
 
     private final ProviderDetector providerDetector = new ProviderDetector();
@@ -1507,7 +1510,7 @@ public abstract class AbstractSurefireMojo
 
     static boolean isForkModeNever( String forkMode )
     {
-        return ForkConfiguration.FORK_NEVER.equals( forkMode );
+        return FORK_NEVER.equals( forkMode );
     }
 
     protected boolean isForking()
@@ -1521,10 +1524,10 @@ public abstract class AbstractSurefireMojo
 
         if ( toolchain != null && isForkModeNever( forkMode1 ) )
         {
-            return ForkConfiguration.FORK_ONCE;
+            return FORK_ONCE;
         }
 
-        return ForkConfiguration.getEffectiveForkMode( forkMode1 );
+        return getEffectiveForkMode( forkMode1 );
     }
 
     private List<RunOrder> getRunOrders()
@@ -1972,33 +1975,55 @@ public abstract class AbstractSurefireMojo
         final Classpath bootClasspathConfiguration =
             getArtifactClasspath( shadeFire != null ? shadeFire : surefireBooterArtifact );
 
-        return new ForkConfiguration( bootClasspathConfiguration, tmpDir, getEffectiveDebugForkedProcess(),
-                                      getEffectiveJvm(),
-                                      getWorkingDirectory() != null ? getWorkingDirectory() : getBasedir(),
-                                      getProject().getModel().getProperties(),
-                                      getArgLine(), getEnvironmentVariables(), getConsoleLogger().isDebugEnabled(),
-                                      getEffectiveForkCount(), reuseForks, PLATFORM );
+        if ( getClassLoaderConfiguration().isManifestOnlyJarRequestedAndUsable() )
+        {
+            return new JarManifestForkConfiguration( bootClasspathConfiguration,
+                    tmpDir,
+                    getEffectiveDebugForkedProcess(),
+                    getWorkingDirectory() != null ? getWorkingDirectory() : getBasedir(),
+                    getProject().getModel().getProperties(),
+                    getArgLine(),
+                    getEnvironmentVariables(),
+                    getConsoleLogger().isDebugEnabled(),
+                    getEffectiveForkCount(),
+                    reuseForks,
+                    PLATFORM.withJdkExecAttributesForTests( getEffectiveJvm() ) );
+        }
+        else
+        {
+            return new JarClasspathForkConfiguration( bootClasspathConfiguration,
+                    tmpDir,
+                    getEffectiveDebugForkedProcess(),
+                    getWorkingDirectory() != null ? getWorkingDirectory() : getBasedir(),
+                    getProject().getModel().getProperties(),
+                    getArgLine(),
+                    getEnvironmentVariables(),
+                    getConsoleLogger().isDebugEnabled(),
+                    getEffectiveForkCount(),
+                    reuseForks,
+                    PLATFORM.withJdkExecAttributesForTests( getEffectiveJvm() ) );
+        }
     }
 
     private void convertDeprecatedForkMode()
     {
         String effectiveForkMode = getEffectiveForkMode();
         // FORK_ONCE (default) is represented by the default values of forkCount and reuseForks
-        if ( ForkConfiguration.FORK_PERTHREAD.equals( effectiveForkMode ) )
+        if ( FORK_PERTHREAD.equals( effectiveForkMode ) )
         {
             forkCount = String.valueOf( threadCount );
         }
-        else if ( ForkConfiguration.FORK_NEVER.equals( effectiveForkMode ) )
+        else if ( FORK_NEVER.equals( effectiveForkMode ) )
         {
             forkCount = "0";
         }
-        else if ( ForkConfiguration.FORK_ALWAYS.equals( effectiveForkMode ) )
+        else if ( FORK_ALWAYS.equals( effectiveForkMode ) )
         {
             forkCount = "1";
             reuseForks = false;
         }
 
-        if ( !ForkConfiguration.FORK_ONCE.equals( getForkMode() ) )
+        if ( !FORK_ONCE.equals( getForkMode() ) )
         {
             getConsoleLogger().warning( "The parameter forkMode is deprecated since version 2.14. "
                                                 + "Use forkCount and reuseForks instead." );
@@ -2482,7 +2507,7 @@ public abstract class AbstractSurefireMojo
     private void ensureThreadCountWithPerThread()
         throws MojoFailureException
     {
-        if ( ForkConfiguration.FORK_PERTHREAD.equals( getEffectiveForkMode() ) && getThreadCount() < 1 )
+        if ( FORK_PERTHREAD.equals( getEffectiveForkMode() ) && getThreadCount() < 1 )
         {
             throw new MojoFailureException( "Fork mode perthread requires a thread count" );
         }
@@ -3505,5 +3530,26 @@ public abstract class AbstractSurefireMojo
     public void setTempDir( String tempDir )
     {
         this.tempDir = tempDir;
+    }
+
+    private static String getEffectiveForkMode( String forkMode )
+    {
+        if ( "pertest".equalsIgnoreCase( forkMode ) )
+        {
+            return FORK_ALWAYS;
+        }
+        else if ( "none".equalsIgnoreCase( forkMode ) )
+        {
+            return FORK_NEVER;
+        }
+        else if ( forkMode.equals( FORK_NEVER ) || forkMode.equals( FORK_ONCE )
+                || forkMode.equals( FORK_ALWAYS ) || forkMode.equals( FORK_PERTHREAD ) )
+        {
+            return forkMode;
+        }
+        else
+        {
+            throw new IllegalArgumentException( "Fork mode " + forkMode + " is not a legal value" );
+        }
     }
 }

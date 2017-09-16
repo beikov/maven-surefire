@@ -25,7 +25,7 @@ import org.apache.commons.lang3.SystemUtils;
 import org.apache.maven.plugin.surefire.JdkAttributes;
 import org.apache.maven.shared.utils.StringUtils;
 import org.apache.maven.shared.utils.cli.Commandline;
-import org.apache.maven.surefire.booter.Classpath;
+import org.apache.maven.surefire.booter.StartupConfiguration;
 import org.apache.maven.surefire.booter.SurefireBooterForkException;
 import org.junit.Test;
 
@@ -34,21 +34,29 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.Properties;
 
+import static java.util.Collections.singletonList;
+import static org.apache.maven.surefire.booter.Classpath.emptyClasspath;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public class ForkConfigurationTest
 {
+    private static final StartupConfiguration STARTUP_CONFIG = new StartupConfiguration( "", null, null, false, false );
+
+    private boolean useManifest;
+
     @Test
     public void testCreateCommandLine_UseSystemClassLoaderForkOnce_ShouldConstructManifestOnlyJar()
         throws IOException, SurefireBooterForkException
     {
+        useManifest = true;
+
         ForkConfiguration config = getForkConfiguration( (String) null );
         File cpElement = getTempClasspathFile();
 
         Commandline cli =
-            config.createCommandLine( Collections.singletonList( cpElement.getAbsolutePath() ), true, false, null, 1 );
+            config.createCommandLine( singletonList( cpElement.getAbsolutePath() ), STARTUP_CONFIG, 1 );
 
         String line = StringUtils.join( cli.getCommandline(), " " );
         assertTrue( line.contains( "-jar" ) );
@@ -63,8 +71,7 @@ public class ForkConfigurationTest
         ForkConfiguration forkConfiguration = getForkConfiguration( "abc\ndef" );
 
         final Commandline commandLine =
-            forkConfiguration.createCommandLine( Collections.singletonList( cpElement.getAbsolutePath() ), false, false,
-                                                 null, 1 );
+            forkConfiguration.createCommandLine( singletonList( cpElement.getAbsolutePath() ), STARTUP_CONFIG, 1 );
         assertTrue( commandLine.toString().contains( "abc def" ) );
     }
 
@@ -72,6 +79,8 @@ public class ForkConfigurationTest
     public void testCurrentWorkingDirectoryPropagationIncludingForkNumberExpansion()
         throws IOException, SurefireBooterForkException
     {
+        useManifest = true;
+
         // SUREFIRE-1136
         File baseDir =
             new File( FileUtils.getTempDirectory(), "SUREFIRE-1136-" + RandomStringUtils.randomAlphabetic( 3 ) );
@@ -81,7 +90,7 @@ public class ForkConfigurationTest
         File cwd = new File( baseDir, "fork_${surefire.forkNumber}" );
 
         ForkConfiguration config = getForkConfiguration( null, cwd.getCanonicalFile() );
-        Commandline commandLine = config.createCommandLine( Collections.<String>emptyList(), true, false, null, 1 );
+        Commandline commandLine = config.createCommandLine( Collections.<String>emptyList(), STARTUP_CONFIG, 1 );
 
         File forkDirectory = new File( baseDir, "fork_1" );
         forkDirectory.deleteOnExit();
@@ -93,6 +102,8 @@ public class ForkConfigurationTest
     public void testExceptionWhenCurrentDirectoryIsNotRealDirectory()
         throws IOException, SurefireBooterForkException
     {
+        useManifest = true;
+
         // SUREFIRE-1136
         File baseDir =
             new File( FileUtils.getTempDirectory(), "SUREFIRE-1136-" + RandomStringUtils.randomAlphabetic( 3 ) );
@@ -107,7 +118,7 @@ public class ForkConfigurationTest
 
         try
         {
-            config.createCommandLine( Collections.<String>emptyList(), true, false, null, 1 );
+            config.createCommandLine( Collections.<String>emptyList(), STARTUP_CONFIG, 1 );
         }
         catch ( SurefireBooterForkException sbfe )
         {
@@ -124,6 +135,8 @@ public class ForkConfigurationTest
     public void testExceptionWhenCurrentDirectoryCannotBeCreated()
         throws IOException, SurefireBooterForkException
     {
+        useManifest = true;
+
         // SUREFIRE-1136
         File baseDir =
             new File( FileUtils.getTempDirectory(), "SUREFIRE-1136-" + RandomStringUtils.randomAlphabetic( 3 ) );
@@ -137,7 +150,7 @@ public class ForkConfigurationTest
 
         try
         {
-            config.createCommandLine( Collections.<String>emptyList(), true, false, null, 1 );
+            config.createCommandLine( Collections.<String>emptyList(), STARTUP_CONFIG, 1 );
         }
         catch ( SurefireBooterForkException sbfe )
         {
@@ -182,8 +195,17 @@ public class ForkConfigurationTest
     private static ForkConfiguration getForkConfiguration( String argLine, String jvm, File cwd )
         throws IOException
     {
-        return new ForkConfiguration( Classpath.emptyClasspath(), null, null, new JdkAttributes( jvm, false ),
-                                            cwd, new Properties(), argLine, null, false, 1, false, new Platform() );
+        Platform platform = new Platform().withJdkExecAttributesForTests( new JdkAttributes( jvm, false ) );
+        if ( true )
+        {
+            return new JarManifestForkConfiguration( emptyClasspath(), null, null,
+                                                cwd, new Properties(), argLine, null, false, 1, false, platform );
+        }
+        else
+        {
+            return new JarClasspathForkConfiguration( emptyClasspath(), null, null,
+                    cwd, new Properties(), argLine, null, false, 1, false, platform );
+        }
     }
 
     // based on http://stackoverflow.com/questions/2591083/getting-version-of-java-in-runtime

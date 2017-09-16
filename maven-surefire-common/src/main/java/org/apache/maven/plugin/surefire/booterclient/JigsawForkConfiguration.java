@@ -1,4 +1,4 @@
-package org.apache.maven.surefire.util;
+package org.apache.maven.plugin.surefire.booterclient;
 
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -19,26 +19,11 @@ package org.apache.maven.surefire.util;
  * under the License.
  */
 
-import org.apache.maven.plugin.surefire.util.Relocator;
-
-import junit.framework.TestCase;
-
 /**
- * @author Kristian Rosenvold
+ * @author <a href="mailto:tibordigana@apache.org">Tibor Digana (tibor17)</a>
+ * @since 2.21.0.Jigsaw
  */
-public class RelocatorTest
-    extends TestCase
+public class JigsawForkConfiguration
 {
-
-    public void testFoo()
-    {
-        String cn = "org.apache.maven.surefire.report.ForkingConsoleReporter";
-        assertEquals( "org.apache.maven.surefire.shadefire.report.ForkingConsoleReporter", Relocator.relocate( cn ) );
-    }
-
-    public void testRelocation()
-    {
-        String org1 = "org.apache.maven.surefire.fooz.Baz";
-        assertEquals( "org.apache.maven.surefire.shadefire.fooz.Baz", Relocator.relocate( org1 ) );
-    }
+        /*Classpath testModulePath = config.getClasspathConfiguration().getTestModulepath();*/
 }

@@ -553,13 +553,11 @@ public class ForkStarter
         {
             tempDir = forkConfiguration.getTempDirectory().getCanonicalPath();
             BooterSerializer booterSerializer = new BooterSerializer( forkConfiguration );
-
+            long pluginPid = forkConfiguration.getPluginPlatform().getPluginPid();
             surefireProperties = booterSerializer.serialize( providerProperties, providerConfiguration,
-                                                                   startupConfiguration, testSet,
-                                                                   readTestsFromInStream,
-                                                                   forkConfiguration.getPluginPlatform().getPid() );
+                    startupConfiguration, testSet, readTestsFromInStream, pluginPid );
 
-            log.debug( "Determined Maven Process ID " + forkConfiguration.getPluginPlatform().getPid() );
+            log.debug( "Determined Maven Process ID " + pluginPid );
 
             if ( effectiveSystemProperties != null )
             {
