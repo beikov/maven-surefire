@@ -429,7 +429,8 @@ public final class ParallelComputerBuilder
                 {
                     int children = countChildren( runner );
                     childrenCounter += children;
-                    if ( children != 0 ) {
+                    if ( children != 0 )
+                    {
                         runs.add( runner );
                     }
                 }
