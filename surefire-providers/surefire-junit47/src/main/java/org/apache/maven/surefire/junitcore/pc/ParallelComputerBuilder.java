@@ -429,9 +429,9 @@ public final class ParallelComputerBuilder
                 {
                     int children = countChildren( runner );
                     childrenCounter += children;
-					if ( children != 0 ) {
+                    if ( children != 0 ) {
                         runs.add( runner );
-					}
+                    }
                 }
             }
             return runs.isEmpty() ? new WrappedRunners() : new WrappedRunners( createSuite( runs ), childrenCounter );
